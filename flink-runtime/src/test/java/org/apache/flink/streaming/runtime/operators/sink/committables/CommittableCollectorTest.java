@@ -18,20 +18,17 @@
 
 package org.apache.flink.streaming.runtime.operators.sink.committables;
 
-import org.apache.flink.metrics.Gauge;
-import org.apache.flink.metrics.groups.UnregisteredMetricsGroup;
-import org.apache.flink.runtime.metrics.groups.InternalSinkCommitterMetricGroup;
+import org.apache.flink.runtime.metrics.groups.MetricsGroupTestUtils;
 import org.apache.flink.streaming.api.connector.sink2.CommittableSummary;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.concurrent.atomic.AtomicInteger;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 class CommittableCollectorTest {
-    private static final TestCommitterMetricGroup METRIC_GROUP = new TestCommitterMetricGroup();
+    private static final MetricsGroupTestUtils.TrackableCommitterMetricGroup METRIC_GROUP =
+            MetricsGroupTestUtils.mockTrackableCommitterMetricGroup();
 
     @BeforeEach
     public void setUp() {
@@ -61,30 +58,5 @@ class CommittableCollectorTest {
         committableCollector.copy();
 
         assertThat(METRIC_GROUP.getGaugeCallCount()).isEqualTo(1);
-    }
-
-    private static class TestCommitterMetricGroup extends InternalSinkCommitterMetricGroup {
-
-        private final AtomicInteger gaugeCallCount = new AtomicInteger(0);
-
-        TestCommitterMetricGroup() {
-            super(
-                    new UnregisteredMetricsGroup(),
-                    UnregisteredMetricsGroup.createOperatorIOMetricGroup());
-        }
-
-        @Override
-        public void setCurrentPendingCommittablesGauge(Gauge<Integer> gauge) {
-            gaugeCallCount.incrementAndGet();
-            super.setCurrentPendingCommittablesGauge(gauge);
-        }
-
-        int getGaugeCallCount() {
-            return gaugeCallCount.get();
-        }
-
-        void resetGaugeCallCount() {
-            gaugeCallCount.set(0);
-        }
     }
 }

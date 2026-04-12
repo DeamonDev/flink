@@ -69,6 +69,11 @@ public class DefaultExecutionGraphFactory implements ExecutionGraphFactory {
 
     private final boolean nonFinishedHybridPartitionShouldBeUnknown;
 
+    @Override
+    public BlobWriter getBlobWriter() {
+        return blobWriter;
+    }
+
     public DefaultExecutionGraphFactory(
             Configuration configuration,
             ClassLoader userCodeClassLoader,

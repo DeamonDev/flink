@@ -31,6 +31,8 @@ import org.apache.flink.core.testutils.OneShotLatch;
 import org.apache.flink.events.Event;
 import org.apache.flink.events.EventBuilder;
 import org.apache.flink.metrics.Gauge;
+import org.apache.flink.runtime.blob.PermanentBlobKey;
+import org.apache.flink.runtime.blob.TestingBlobWriter;
 import org.apache.flink.runtime.checkpoint.CheckpointException;
 import org.apache.flink.runtime.checkpoint.CheckpointFailureReason;
 import org.apache.flink.runtime.checkpoint.CheckpointIDCounter;
@@ -174,6 +176,34 @@ public class AdaptiveSchedulerTest extends AdaptiveSchedulerTestBase {
                         .build();
 
         assertThat(scheduler.getState()).isInstanceOf(Created.class);
+    }
+
+    @Test
+    void testCloseAsyncCleansUpTaskInformationBlobKeys() throws Exception {
+        final TestingBlobWriter blobWriter = new TestingBlobWriter();
+        final JobGraph jobGraph = createJobGraph();
+
+        // Simulate a previous run: upload a blob and cache its key on the JobVertex
+        final JobVertex jobVertex = jobGraph.getVertices().iterator().next();
+        final PermanentBlobKey blobKey =
+                blobWriter.putPermanent(jobGraph.getJobID(), new byte[] {1, 2, 3});
+        jobVertex.setTaskInformationBlobKey(blobKey);
+
+        assertThat(blobWriter.numberOfBlobs()).isEqualTo(1);
+
+        scheduler =
+                new AdaptiveSchedulerBuilder(
+                                jobGraph,
+                                singleThreadMainThreadExecutor,
+                                EXECUTOR_RESOURCE.getExecutor())
+                        .setBlobWriter(blobWriter)
+                        .build();
+
+        // closeAsync() triggers cleanupTaskInformationBlobKeys() before suspending
+        closeInExecutorService(scheduler, singleThreadMainThreadExecutor);
+
+        assertThat(blobWriter.numberOfBlobs()).isEqualTo(0);
+        assertThat(jobVertex.getTaskInformationBlobKey()).isNull();
     }
 
     @Test

@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.scheduler;
 
+import org.apache.flink.runtime.blob.BlobWriter;
 import org.apache.flink.runtime.checkpoint.CheckpointIDCounter;
 import org.apache.flink.runtime.checkpoint.CheckpointStatsTracker;
 import org.apache.flink.runtime.checkpoint.CheckpointsCleaner;
@@ -34,6 +35,9 @@ import org.slf4j.Logger;
 
 /** Factory for creating an {@link ExecutionGraph}. */
 public interface ExecutionGraphFactory {
+
+    /** Returns the {@link BlobWriter} used by execution graphs created by this factory. */
+    BlobWriter getBlobWriter();
 
     /**
      * Create and restore {@link ExecutionGraph} from the given {@link JobGraph} and services.

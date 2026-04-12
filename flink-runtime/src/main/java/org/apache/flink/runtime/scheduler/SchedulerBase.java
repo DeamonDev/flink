@@ -35,6 +35,7 @@ import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.queryablestate.KvStateID;
 import org.apache.flink.runtime.OperatorIDPair;
 import org.apache.flink.runtime.accumulators.AccumulatorSnapshot;
+import org.apache.flink.runtime.blob.PermanentBlobKey;
 import org.apache.flink.runtime.checkpoint.CheckpointCoordinator;
 import org.apache.flink.runtime.checkpoint.CheckpointException;
 import org.apache.flink.runtime.checkpoint.CheckpointFailureReason;
@@ -724,11 +725,34 @@ public abstract class SchedulerBase implements SchedulerNG, CheckpointScheduling
 
         FutureUtils.assertNoException(checkpointServicesShutdownFuture);
 
+        cleanupTaskInformationBlobKeys();
         incrementVersionsOfAllVertices();
         cancelAllPendingSlotRequestsInternal();
         executionGraph.suspend(cause);
         operatorCoordinatorHandler.disposeAllOperatorCoordinators();
         return checkpointServicesShutdownFuture;
+    }
+
+    /**
+     * Deletes cached TaskInformation blob keys from the blob store and clears them from
+     * JobVertices. This prevents orphaned blobs from accumulating in the HA blob store across JM
+     * restarts, since the in-memory cache on JobVertex is lost on restart and new blobs would be
+     * created.
+     */
+    private void cleanupTaskInformationBlobKeys() {
+        for (ExecutionJobVertex ejv : executionGraph.getVerticesTopologically()) {
+            PermanentBlobKey key = ejv.getJobVertex().getTaskInformationBlobKey();
+            if (key != null) {
+                log.debug(
+                        "Deleting TaskInformation blob {} for vertex {}.",
+                        key,
+                        ejv.getJobVertexId());
+                executionGraphFactory
+                        .getBlobWriter()
+                        .deletePermanent(executionGraph.getJobID(), key);
+                ejv.getJobVertex().setTaskInformationBlobKey(null);
+            }
+        }
     }
 
     @Override

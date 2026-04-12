@@ -35,6 +35,7 @@ import org.apache.flink.core.failure.FailureEnricher.Context;
 import org.apache.flink.queryablestate.KvStateID;
 import org.apache.flink.runtime.JobException;
 import org.apache.flink.runtime.accumulators.AccumulatorSnapshot;
+import org.apache.flink.runtime.blob.PermanentBlobKey;
 import org.apache.flink.runtime.checkpoint.CheckpointException;
 import org.apache.flink.runtime.checkpoint.CheckpointFailureReason;
 import org.apache.flink.runtime.checkpoint.CheckpointIDCounter;
@@ -777,6 +778,7 @@ public class AdaptiveScheduler
     public CompletableFuture<Void> closeAsync() {
         LOG.debug("Closing the AdaptiveScheduler. Trying to suspend the current job execution.");
 
+        cleanupTaskInformationBlobKeys();
         state.suspend(new FlinkException("AdaptiveScheduler is being stopped."));
 
         Preconditions.checkState(
@@ -794,6 +796,23 @@ public class AdaptiveScheduler
                 // PendingCheckpoint
                 checkpointsCleaner::closeAsync,
                 getMainThreadExecutor());
+    }
+
+    /**
+     * Deletes cached TaskInformation blob keys from the blob store and clears them from
+     * JobVertices. This prevents orphaned blobs from accumulating in the HA blob store across JM
+     * restarts, since the in-memory cache on JobVertex is lost on restart and new blobs would be
+     * created.
+     */
+    private void cleanupTaskInformationBlobKeys() {
+        for (JobVertex vertex : jobGraph.getVertices()) {
+            PermanentBlobKey key = vertex.getTaskInformationBlobKey();
+            if (key != null) {
+                LOG.debug("Deleting TaskInformation blob {} for vertex {}.", key, vertex.getID());
+                executionGraphFactory.getBlobWriter().deletePermanent(jobGraph.getJobID(), key);
+                vertex.setTaskInformationBlobKey(null);
+            }
+        }
     }
 
     private void stopCheckpointServicesSafely(JobStatus terminalState) {
